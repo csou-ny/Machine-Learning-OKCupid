@@ -1,0 +1,294 @@
+---
+title: "Classification Models for San Francisco OkCupid Dating Profiles- Explorations and Case Studies"
+author: "Co Sou Statistical Learning S2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+  The dataset studied here consists of dating profiles from Okcupid of users from the San Francisco Bay Area. It was scraped, with permission to be shared, on June 30, 2012. It formed the basis for a then published paper "OkCupid Profile Data for Introductory Statistics and Data Science Courses" (2015) by Albert Y. Kim and Adriana Escobedo-Land. This paper examines mostly descriptive procedures and exploratory data analysis of the data. Here, we apply predictive modeling in hopes of adding insights to the existing literature. This study will be done in the various case studies that employ techniques of statistical learning, with emphasis placed on classification goals.
+
+  But first, some preliminary observations about the data and its cleaning. On first glance, we notice that while there are many categorical variables with many levels of factors. For the sake of simplicity we have to condense them into a more manageable number of factor levels. Though this will cause some lost of information, the benefits are reduction of redundancy and easier to read regression output. Secondly, a problem with users on a dating website has to do with selection bias. Obviously, users who go on OkCupid would be seeking potential mates but as it turns out many non-single users are also present, for whatever reason they might have, though there aren't as many as single users. This causes an unbalanced ratio of single and non-single users. When using this binary variable, we must be careful about its restriction.
+
+  We first focus on Logistic Regression. The goal is to determine whether the numerical variables in the data can predict whether a user is listed as Single or Not Single. We infer that Age, Income, and Height might contribute to the response. For example, it is possible that younger people are more open to non-monogamous relationships? Is there any truth to the stereotype of the rich playboy who dates multiple people simply because he has the money to do so (Income is capped at a half a million dollars for this analysis)? Are taller people, a desirable physical trait, more proned to dating more people along the side? 
+
+  This is logistic regression simply on the data:
+```{r, echo=FALSE}
+Cupid <- read.csv("/Users/Sou/Desktop/OKCupid.csv", stringsAsFactors = TRUE)
+#some cleaning up on the levels of education
+#replace factor levels
+levels(Cupid$education)[match(c("dropped out of college/university","dropped out of space camp",
+                                 "working on high school", "high school","space camp","working on space camp",
+                                 "dropped out of high school","graduated from high school", "graduated from two-year college"
+                                 , "graduated from space camp", "dropped out of two-year college", "two-year college", "" ),
+                               levels(Cupid$education))] <- "No Bachelors Degree"
+levels(Cupid$education)[match(c("dropped out of law school","dropped out of masters program","dropped out of med school" 
+                                 , "dropped out of ph.d program"),      
+                               levels(Cupid$education))] <- "Dropped Out of Grad School"
+levels(Cupid$education)[match(c("working on college/university", "working on two-year college"),
+                               levels(Cupid$education))] <- "Working on Undergrad" 
+levels(Cupid$education)[match(c( "working on ph.d program", "ph.d program", "graduated from ph.d program"),  
+       levels(Cupid$education))] <- "Doctorate or Working on" 
+levels(Cupid$education)[match(c( "working on med school", "med school","graduated from med school"), 
+                       levels(Cupid$education))] <- "Med School or Working on" 
+levels(Cupid$education)[match(c("graduated from law school",  "law school", "working on law school"),
+                               levels(Cupid$education))] <- "Law School or Working on"
+levels(Cupid$education)[match(c("graduated from masters program", "masters program", "working on masters program"),
+                               levels(Cupid$education))] <- "Masters or Working on"
+levels(Cupid$education)[match(c("college/university","graduated from college/university"),
+                               levels(Cupid$education))] <- "Bachelors"
+
+#religion factor levels need some work---huge amount
+levels(Cupid$religion)[match(c("atheism", "atheism and laughing about it" , 
+                               "atheism and somewhat serious about it", "atheism and very serious about it" ,
+                               "atheism but not too serious about it"),
+                               levels(Cupid$religion))] <- "atheism"
+levels(Cupid$religion)[match(c("agnosticism", "agnosticism and laughing about it", 
+                               "agnosticism and somewhat serious about it", "agnosticism and very serious about it",
+                               "agnosticism but not too serious about it"),
+                             levels(Cupid$religion))] <- "agnosticism"
+levels(Cupid$religion)[match(c("buddhism and laughing about it" , "buddhism" , 
+                               "buddhism and somewhat serious about it", "buddhism and very serious about it" ,
+                               "buddhism but not too serious about it"),
+                             levels(Cupid$religion))] <- "buddhism" 
+levels(Cupid$religion)[match(c("catholicism" , "catholicism and laughing about it" , 
+                               "catholicism and somewhat serious about it", "catholicism and very serious about it",
+                               "catholicism but not too serious about it"),
+                             levels(Cupid$religion))] <- "catholicism"
+levels(Cupid$religion)[match(c("christianity" , "christianity and laughing about it" , 
+                               "christianity and somewhat serious about it", "christianity and very serious about it",
+                               "christianity but not too serious about it"),
+                             levels(Cupid$religion))] <- "christianity"
+levels(Cupid$religion)[match(c("hinduism" , "hinduism and laughing about it" , 
+                               "hinduism and somewhat serious about it", "hinduism and very serious about it",
+                               "hinduism and somewhat serious about it"),
+                             levels(Cupid$religion))] <- "hinduism"
+levels(Cupid$religion)[match(c("islam", "islam and laughing about it" , 
+                               "islam and somewhat serious about it", "islam and very serious about it",
+                               "islam but not too serious about it"),
+                             levels(Cupid$religion))] <- "islam"
+levels(Cupid$religion)[match(c("judaism", "judaism and laughing about it" , 
+                               "judaism and somewhat serious about it",  "judaism and very serious about it" ,
+                               "judaism but not too serious about it"),
+                             levels(Cupid$religion))] <- "judaism"
+levels(Cupid$religion)[match(c("other", "other and laughing about it", 
+                               "other and somewhat serious about it", "other and very serious about it" ,
+                               "other but not too serious about it"),
+                             levels(Cupid$religion))] <- "other"
+levels(Cupid$religion)[match(c(""),levels(Cupid$religion))] <- "None"
+
+
+#last_online--- convert into time format and calculate number of minutes between log in
+
+#offspring factor levels need some work
+levels(Cupid$offspring)[match(c("doesn&rsquo;t have kids",  "doesn&rsquo;t have kids, and doesn&rsquo;t want any", 
+                                "doesn&rsquo;t have kids, but might want them" , "doesn&rsquo;t have kids, but wants them"  ,
+                                "doesn&rsquo;t want kids"),
+                             levels(Cupid$offspring))] <- "No Kids"
+levels(Cupid$offspring)[match(c( "has a kid", "has a kid, and might want more", "has a kid, and wants more" , 
+                                 "has a kid, but doesn&rsquo;t want more" , "has kids"  ,
+                                 "has kids, and might want more", "has kids, and wants more", "has kids, but doesn&rsquo;t want more"),
+                              levels(Cupid$offspring))] <- "Has Kids"
+levels(Cupid$offspring)[match(c("might want kids", "wants kids"), levels(Cupid$offspring))] <- "Wants Kids"
+levels(Cupid$offspring)[match(c(""), levels(Cupid$offspring))] <- "No Response"
+
+#ethnicity factor levels need some work
+#turn the location into factors
+#pet factor needs to be refactored
+
+
+
+Cupid$status <- ifelse(Cupid$status == "single", "Single", "Not Single")
+Cupid$status <- as.factor(Cupid$status)
+
+Cupid2 <- subset(Cupid, income >0 & income <= 500000 ) #No income coded as "-1"
+
+logistic <- glm(status~ income + age +height, data= Cupid2, family="binomial")
+summary(logistic)
+coef(logistic)
+log.pred = predict(logistic, data=Cupid2, type="response")
+
+pred.log <- rep("Single", 10983)
+pred.log[log.pred >0.5] = "Not Single"
+
+table(pred.log, Cupid2$status)
+```
+
+  We see that Income and Age are statistically significant predictors while Height is not. This model, however, has an extremely high AIC so it shouldn't be used as a final conclusion. The confusion matrix returned was inconclusive, indicating overfitting of the model to the data.
+
+  Instead we gain more accrucacy by splitting the data into training and testing sets.
+```{r, echo=FALSE}
+train = (Cupid2$age <35)
+CupidUnder35 <- Cupid2[!train,] #[1] 3626   22 dimensions
+StatusUnder35 = Cupid2$status[!train] 
+
+glm.fit.logistic <- glm(status ~ income + age +height, data= Cupid2,
+                        family=binomial, subset=train)
+glm.probs.logistic <- predict(glm.fit.logistic, CupidUnder35, type="response")
+summary(glm.fit.logistic)
+glm.pred= rep("Single", 3626) 
+glm.pred[glm.probs.logistic >0.5] = "Not Single"
+
+table(glm.pred, StatusUnder35) #confusion matrix----now it finally returns a proper confusion matrix
+```
+  Like before, the predictors Age and Income are statistically significant while Height is not. This version has a lower AIC, which is expected and desirable. This procedure produces a full confusion matrix. The model correctly predicted 392 out of 3626 observations, for a success rate of about 11%, which is terrible. The selection bias of the status response variable might have been a major contributing factor to this. But at least, we gain some insights: We conclude that the Height predictor is a weak contributor to whether a user is not single. Also, there might be some predictive powers to the Age and Income variables for this type of question. Further exploration might be worth it.
+
+  Logistic regression might not be appropriate to all model cases. But there are cases where it might perform better. Here we want to predict whether a user is Male or Female based on the same numerical variables as above.
+```{r, echo=FALSE}
+#Logistic2
+train2 = (Cupid2$age <35)
+#Status.train <- (StatusSample$age <35)
+CupidUnder35 <- Cupid2[!train,] #[1] 3626   22 dimensions
+SexUnder35 = Cupid2$sex[!train] 
+glm.fit.logistic3 <- glm(sex ~ age + income+ height, data= Cupid2, family=binomial, subset=train2)
+summary(glm.fit.logistic3)
+glm.probs.logistic3 <- predict(glm.fit.logistic, CupidUnder35, type="response")
+glm.pred3= rep("m", 3626) 
+glm.pred3[glm.probs.logistic3 >0.5] = "f"
+table(glm.pred3, SexUnder35)
+```
+  All predictor variables are statistically significant. The confusion matrix for this model gives 1035 correct predictions out of 3626 observations, for a success rate of 28.5%. Better than the above model. Recall that logistic regression is sensitive to the way the data was split for training and testing. That could be rexamined and perhaps, a more evenly balanced training and testing split should be made. 
+
+  The model above seems more realistic and pausible. We consider using it as the basis for other classification techniques. In particular, Linear Discriminant Analysis is used in hopes of more accurate predictions. Here, LDA has the advantages of dealing with smaller number of observations and better than Logistic Regression for when there is a clear separation between classes of response. We know that Sex is strictly divided with little ambiguity, for the most part.
+
+  Here is a simple LDA on the data:
+```{r, echo=FALSE}
+library(MASS)
+lda.fit <- lda(Cupid2$sex ~ age + income+ height,data= Cupid2)
+lda.fit
+plot(lda.fit)
+```
+\newline
+  Notice that there is a 1:3 ratio of female to male, a result of income filtering in the data cleaning. It is possible that women are less likely to share their income rather than men, who understand that (a high) income is a desirable trait in dating. 
+
+  The group means output suggests that: For both men and women, there is a tendency for Age,Income, and Height to have a positive effect on predicting the respective sex. The coefficients of Linear Discriminants are of interest. They are used to multiply the corresponding predictor values to produce a "score", which is then used to compute the posterior probability to form the decision rule. Here is some interpretation: If age(-1.125630e-02) + income(3.770707e-06) +height(3.128835e-01) is high, then it predict the correct sex and vice versa. The plot is examined. For female group, we see that most of the distribution of probabilities are below zero (low) and thus, is not effective in predicting the correct sex. But for male group, the distribution is skewed above zero and thus, we conclude that the model is effective in predicting the male sex.
+
+  Now we use training and testing sets to predict and compare with Logistic Regression. We hope that the success rate is better than that of Logistic Regression.The confusion matrix returned by the model is:
+```{r, echo=FALSE}
+lda.pred <- predict(lda.fit,CupidUnder35 )
+
+lda.class <- lda.pred$class
+table(lda.class, SexUnder35)
+
+```
+
+  The success rate is  3122 out of 3626 or 86%. This is a major improvement than that of Logistic Regression using the same training and testing set. We prefer the use of LDA over Logistic Regression for modeling this case.
+
+  Finally, we turn our attention to the nonparametric method of classification. In LDA and Logistic Regression, the normal distribution is assumed to be the underlying distribution. Is there any justification of this? By convenience we use the normal distribution to build initial models. By contrast, nonparametric methods don't rely on such strong assumption. 
+
+Here is the confusion matrix for the KNN approach with 1 number of nearest neighbors.
+```{r, echo=FALSE}
+library(class)
+train.X <- cbind(Cupid2$age, Cupid2$income, Cupid2$height)[train2,]
+test.X <- cbind(Cupid2$age, Cupid2$income, Cupid2$height)[!train2,]
+train.sex <- Cupid2$sex[train2]
+set.seed(1)
+knn.pred = knn(train.X, test.X, train.sex, k=1)
+table(knn.pred, SexUnder35)
+```
+  The success rate is 3009 out of 3626, or 83%. This is better than Logistic Regression and is slightly worse than that of LDA. Of course the choice of number of nearest neighbors can have an effect on the prediction success.
+
+  In conclusion, we prefer the use of LDA for this particular case study.
+
+
+  The dataset is rich in categorical variables with a diverse range of factor levels. In the previous case studies, we did not take advantage of them in favor of using only the numerical variables for prediction. Here we employ simple classification tree.
+
+```{r, echo=FALSE}
+levels(Cupid2$job)[match(c("artistic / musical / writer", "entertainment / media","hospitality / travel"),
+                                levels(Cupid2$job))] <- "Artistic"
+levels(Cupid2$job)[match(c("", "unemployed","rather not say", "other", "retired","student" ),
+                        levels(Cupid2$job))] <- "Not Working or Unknown"
+levels(Cupid2$job)[match(c( "military","construction / craftsmanship", "transportation" ),
+                        levels(Cupid2$job))] <- "Blue Collar"
+levels(Cupid2$job)[match(c("clerical / administrative",  "education / academia", "sales / marketing / biz dev"),
+                        levels(Cupid2$job))] <- "Middle"
+levels(Cupid2$job)[match(c("banking / financial / real estate","executive / management",
+                          "law / legal services", "political / government"),
+                        levels(Cupid2$job))] <- "White Collar"
+levels(Cupid2$job)[match(c("computer / hardware / software", "medicine / health" ,"science / tech / engineering"),
+                        levels(Cupid2$job))] <- "Technical"
+
+library(tree)
+High <- ifelse(Cupid2$income <= 150000, "No", "Yes")
+Older <- ifelse(Cupid2$age <= 40, "No", "Yes")
+White <- ifelse(Cupid2$ethnicity =="white", "No", "Yes")
+Cupid3 <- data.frame(Cupid2, High, Older, White)
+tree.Cupid <- tree(High~ education + job + offspring + sex +drugs+ body_type+ Older+ White+ diet + drinks+
+                     orientation+ religion , 
+                   data=Cupid3)
+summary(tree.Cupid)
+
+plot(tree.Cupid)
+text(tree.Cupid, pretty=0)
+```
+  This simple classification tree identifies two prominent predictor variables that form the internal tree structure: job type and body type. In particular, only the strongest factor levels associated with the predictors determine the decision rule. Qualitively, the conclusion is that women who are not working or have non-professional job roles with less than desirable body types and who don't have professional degrees will strongly be predicted as having not high income (high being $100000). Many predictors were used in the initial model but only four predictors were deemed to have strong predictive properties. The misclassification error rate is about 1.7%, which is very desirable. 
+
+  The classification tree needs to be used in conjunction with training and testing sets to overcome overfitting. Here we fit regression models on the tree doing just that. Notice that new predictor variables reveal themselves to be significant:
+```{r, echo=FALSE}
+set.seed(1)
+train.tree <- sample(1:nrow(Cupid3), 10983/2)
+test.tree <- Cupid3[-train.tree,]
+High.test <- Cupid3$High[-train.tree]
+tree.Cupid2<- tree(High~ education + job + offspring + sex +drugs+ body_type+ Older+ White+ diet + drinks+
+                     orientation+ religion ,data=Cupid3, subset=train.tree)
+tree.pred2 <- predict(tree.Cupid2, test.tree, type="class")
+
+summary(tree.Cupid2)
+table(tree.pred2, High.test) #0.9823379 very high success rate
+plot(tree.Cupid2)
+text(tree.Cupid2, pretty=0)
+``` 
+
+  Just like before job type, body type, sex are prominent predictors but this tree also suggests that drinking behavior and religion as significant. The regression tree looks cluttered. We consider pruning it to get an optimal tree with weaker predictors removed.
+
+```{r, echo=FALSE}
+cv.Cupid <- cv.tree(tree.Cupid2, FUN=prune.misclass)
+prune.Cupid <- prune.tree(tree.Cupid2, best=6)
+plot(prune.Cupid)
+text(prune.Cupid, pretty=0)
+```
+\newline
+  The above is a more desirable visualization of the decision ruling. 
+
+  A remark about this procedure: This technique reveals some strong insights into the data. In particular, it focuses only on female and their relationship to having high income or not but reveals nothing discriminatory about males at all. More analysis needs to be done if we want predictive results about males. Also, since it only gives a glimpse into scenarios of possible models, it should be best used as aide for exploratory data analysis. 
+
+  Continuing with this case study we can extend it by performing bagging and boosting. Recall that decision tree methods have high variance and is a by product of the splitting mechanism. Bagging takes advantage of cheap computing power to give lower variance models via bootstrapping. Applying bagging on the same model framework gives the following result:
+
+```{r, echo=FALSE}
+library(randomForest)
+set.seed(1)
+bag.Cupid <- randomForest(High~ education + job + offspring + sex +drugs+ body_type+ Older+ White+ diet + drinks+
+                            orientation+ religion, data=Cupid3, subset=train.tree, importance=TRUE)
+bag.Cupid
+importance(bag.Cupid)
+varImpPlot(bag.Cupid)
+```
+  We see a very small OOB error rate of 1.82% compared to the residual deviance of 0.134 for the regression tree model. The graphical output suggests a similar profile of predictors that have high predictive powers. Once again, it is stressed that this is more useful as an exploratory aide. These predictors should be compared with the decision tree models and we can identify common predictors and use them as the foundations for other questions to be asked.
+
+  Recall that Bagging is a special case of the more general Random Forest technique, which uses all predictor variables in the data. This method is not compatible with the question being asked in this case study since we only selected multiple but not all predictors to build the model. We therefore skip this discussion.
+
+  Boosting, yet another tree based method, can be applied in this framework. Unlike the previous, this one is particularly useful to reduce the effects of overfitting.
+
+```{r, echo=FALSE}
+library(gbm)
+set.seed(1)
+High2 <- ifelse(Cupid3$High =="Yes", 0,1 )
+Cupid4 <- data.frame(Cupid3, High2)
+boost.Cupid <- gbm(High2 ~education + job + offspring + sex +drugs+ body_type+ Older+ White+ diet + drinks+
+                     orientation+ religion, data= Cupid4[-train,], distribution = "bernoulli", n.trees = 5000, 
+                   interaction.depth = 4)
+summary(boost.Cupid)
+```
+  Once again, the results show a similar profile of predictors that are influential to modeling the response. This one reveals a very strong predictive effect for the religion variable, which wasn't as strong in previous models, and demoted the job type variable in terms of significance. Beware of the influence plot shown, as its y-axis is not labeled properly; see the actual summary table instead. Also consider that this method is computationally expensive and can take a long time to render for large data size. 
+
+  In conclusion, we are privy toward using sex, body type, education, drinking behavior, and religion type as all possible strong predictors to predicting whether someone has a high income or not. The decision tree methods only discriminates against the female sex while providing no decision rule for males. Bagging and Boosting don't have this restriction; though they also treat sex as a whole predictor instead of levels and don't provide insight to the predictive powers of the individual sex types. In future work, we should clean the data to more strongly separate the two into separate variables to see which sex level has more predictive effects on the response. 
+
+
+
+
+
+
+
+
